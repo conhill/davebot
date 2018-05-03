@@ -1,0 +1,32 @@
+{
+  "name": "davebot",
+  "version": "1.0.0",
+  "description": "",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "body-parser": "^1.18.2",
+    "discord.js": "^11.2.0",
+    "express": "^4.16.2",
+    "ffmpeg": "0.0.4",
+    "fluent-ffmpeg": "^2.1.2",
+    "mongoose": "^4.13.0",
+    "mtgsdk": "^0.3.0",
+    "node-opus": "^0.2.7",
+    "node-witai-speech": "^1.0.2",
+    "opusscript": "0.0.4",
+    "p5": "^0.5.16",
+    "path": "^0.12.7",
+    "sox": "^0.1.0",
+    "ytdl-core": "^0.18.1",
+    "request": "^2.83.0",
+    "underscore": "^1.8.3"
+  },
+  "devDependencies": {
+    "@types/underscore": "^1.8.5"
+  }
+}
