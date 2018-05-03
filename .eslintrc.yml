@@ -1,0 +1,127 @@
+env:
+  commonjs: false
+  es6: false
+  node: true
+  browser: true
+  jquery: true
+rules:
+## BEGIN ESLint Defaults
+  no-await-in-loop:
+    - error
+  no-compare-neg-zero:
+    - error
+  no-cond-assign:
+    - error
+  no-constant-condition:
+    - error
+  no-control-regex:
+    - error
+  no-dupe-args:
+    - error
+  no-dupe-keys:
+    - error
+  no-duplicate-case:
+    - error
+  no-empty:
+    - error
+  no-empty-character-class:
+    - error
+  no-ex-assign:
+    - error
+  no-extra-boolean-cast:
+    - error
+  no-extra-parens:
+    - error
+  no-extra-semi:
+    - error
+  no-func-assign:
+    - error
+  no-inner-declarations:
+    - error
+  no-invalid-regexp:
+    - error
+  no-irregular-whitespace:
+    - error
+  no-obj-calls:
+    - error
+  no-regex-spaces:
+    - error
+  no-sparse-arrays:
+    - error
+  no-template-curly-in-string:
+    - error
+  no-unexpected-multiline:
+    - error
+  no-unreachable:
+    - error
+  no-unsafe-finally:
+    - error
+  no-unsafe-negation:
+    - error
+  use-isnan:
+    - error
+  valid-typeof:
+    - error
+  dot-notation:
+    - error
+  no-case-declarations:
+    - error
+  no-empty-pattern:
+    - error
+  no-extra-bind:
+    - error
+  no-global-assign:
+    - error
+  no-octal:
+    - error
+  no-redeclare:
+    - error
+  no-self-assign:
+    - error
+  no-unused-labels:
+    - error
+  no-useless-escape:
+    - warn
+  no-undef:
+    - error
+  no-unused-vars:
+    - error
+## END ESLint Defaults
+  no-console:
+    - off
+  indent:
+    - error
+    - tab
+    - SwitchCase: 1
+  linebreak-style:
+    - error
+    - unix
+  quotes:
+    - error
+    - single
+  semi:
+    - error
+    - always
+  no-bitwise: 
+    - error
+  curly:
+    - error
+  eqeqeq:
+    - warn
+    - always
+  sort-vars:
+    - error
+  semi-spacing:
+    - error
+  no-caller:
+    - error
+  no-return-assign: 
+    - error
+  no-debugger:
+    - warn
+
+globals:
+  require: true
+
+parserOptions:
+  ecmaVersion: 8

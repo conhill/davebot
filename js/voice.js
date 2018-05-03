@@ -1,4 +1,19 @@
 const receiver = connection.createReceiver();
+var bodyParser = require('body-parser');
+const opus = require('node-opus');
+const ffmpeg = require('fluent-ffmpeg');
+const path = require('path');
+const recordingsPath = './recordings';
+const decode = require('./decodeOpus.js');
+const WitSpeech = require('node-witai-speech');
+
+var listenStreams = new Map();
+
+const rate = 48000;
+const frame_size = 1920;
+const channels = 2;
+var listenReceiver = null;
+
 var originalPath;
 receiver.on('opus', function(user, data) {
 	let hexString = data.toString('hex');
