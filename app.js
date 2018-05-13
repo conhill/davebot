@@ -13,10 +13,13 @@ const streamOptions = {
 
 //Songs = require('./models/songs');
 
+var port_number = server.listen(process.env.PORT || 3000);
+app.listen(port_number);
 //Alert for when bot is online
 bot.on('ready', () => {
 	console.log('I am ready!');
 	//app.listen(3000);
+	bot.listen(process.env.PORT || 3000)
 	console.log('running on port 3000');
 	// JoinChannel('374375554268397568');
 	// let channel = bot.channels.get('374375554268397568');
