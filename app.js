@@ -4,6 +4,8 @@ const Discord = require('discord.js');
 const bot = new Discord.Client();
 const mtg = require('mtgsdk');
 const ytdl = require('ytdl-core');
+var express = require('express');
+var app = express();
 
 var isReady = true;
 const streamOptions = {
@@ -13,8 +15,8 @@ const streamOptions = {
 
 //Songs = require('./models/songs');
 
-var port_number = server.listen(process.env.PORT || 3000);
-app.listen(port_number);
+// var port_number = server.listen(process.env.PORT || 3000);
+// app.listen(port_number);
 //Alert for when bot is online
 bot.on('ready', () => {
 	console.log('I am ready!');
@@ -138,5 +140,14 @@ bot.on('ready', () => {
 
 	JoinChannel('189914746408009728');
 });
+
+
+app.set('port', (process.env.PORT || 5000));
+app.use(express.static(__dirname + '/public'));
+
+app.listen(app.get('port'), function() {
+  console.log("Node app is running at localhost:" + app.get('port'))
+})
+
 
 bot.login('MzM3MzU5Mjc0MjQwMTE0Njg4.DFJJ4w.TKEe--uuNwNhluzoWNFsfHafHwo');
