@@ -95,7 +95,7 @@ rules:
     - SwitchCase: 1
   linebreak-style:
     - error
-    - unix
+    - windows
   quotes:
     - error
     - single
@@ -125,3 +125,4 @@ globals:
 
 parserOptions:
   ecmaVersion: 8
+  sourceType: module
