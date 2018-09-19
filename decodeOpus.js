@@ -30,6 +30,10 @@ let convertOpusStringToRawPCM = (inputPath, filename, cb) => {
 	total++;
 	let encoder = new opus.OpusEncoder(rate, channels);
 	const inputStream = fs.createReadStream(inputPath);
+	inputStream.on('error', function(err){
+		console.log(err);
+		// throw err;
+	});
 	const outputStream = fs.createWriteStream(path.join(path.dirname(inputPath), `${filename}.raw_pcm`));
 	let data = '';
 	inputStream.on('data', chunk => {
@@ -56,8 +60,8 @@ let convertOpusStringToRawPCM = (inputPath, filename, cb) => {
 			console.log(`Completed ${100 * complete / total}%`);
 		});
 	});
-  console.log("not yet translating"); 
-  cb();
+	console.log('not yet translating'); 
+	cb();
 };
 
 let convertAllOpusStringToRawPCM = (inputDirectory) => {
@@ -79,5 +83,5 @@ let convertAllOpusStringToRawPCM = (inputDirectory) => {
 
 //convertAllOpusStringToRawPCM(inputDirectory);
 module.exports = {
-  convertOpusStringToRawPCM: convertOpusStringToRawPCM
-}
+	convertOpusStringToRawPCM: convertOpusStringToRawPCM
+};
