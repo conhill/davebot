@@ -5,20 +5,24 @@ function randomIntInc(low, high) {
 	return Math.floor(Math.random() * (high - low + 1) + low);
 }
 
-export function mtgResponse(message){
-	var rando = randomIntInc(1, 5000);
+export function mtgResponse(message) {
 
-	card.find(rando, 'all').then(result2 => {
+	var request = require('request');
+
+	request({ url: 'https://api.scryfall.com/cards/random', json: true }, function(err, res, card) {
+		if (err) {
+			throw err;
+		}
 		const embed = new RichEmbed()
-			.setTitle(result2.card.name)
+			.setTitle(card.name)
 			.setColor(0x00AE86)
-			.setDescription(result2.card.name)
-			.setImage(result2.card.imageUrl)
+			.setDescription(card.name)
+			.setImage(card.image_uris.large)
 			.setTimestamp();
 
 		message.channel.send({
 			embed
 		});
-		return result2.card;
 	});
+
 }

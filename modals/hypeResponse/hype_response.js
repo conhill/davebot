@@ -1,47 +1,57 @@
 import ytdl, { getInfo } from 'ytdl-core';
-import { play } from '../musicQueue/music_queue.js';
 import genericResponse, { say } from '../genericResponse/generic_response.js';
+var fs = require('fs');
 
 
-function endDispatcher(dispatcher){
-	dispatcher.end();
+function endDispatcher(dispatcher, queued) {
+	if (queued) {
+		console.log('END DISPATCHER IN HYPE')
+		global.pQueue.endDispatcher();
+	}
 }
 
-function playHype(link, start, length) {
-	let counter;
-	console.log(length);
-	console.log(typeof length);
-	if (isNaN(length) && length.indexOf('s') > -1) {
+function playHype(link, start, length, queued = false) {
+	let counter = false;
+
+	if (length && isNaN(length) && length.indexOf('s') > -1) {
 		counter = length.split('s')[0];
 	} else {
 		counter = length;
 	}
+
 	let stream = link;
 
-	if(link.indexOf('youtube') > -1){
+	if (link && link.indexOf('youtube') > -1) {
+		console.log('start: ' + start)
 		stream = ytdl(link, {
 			begin: start,
 		});
 	}
 
-	let dispatcher = global.connection.playStream(stream, {
-		seek: 3,
-		volume: 0.2
+	let dispatcher = global.connection.playFile(stream, {
+		seek: 6,
+		volume: 0.8
 	});
 
 	dispatcher.on('start', () => {
 		global.connection.player.streamingData.pausedTime = 0;
 	});
 
-	dispatcher.on('error', console.error);
+	dispatcher.on('end', () => {
+		endDispatcher(dispatcher, queued)
+	});
 
-	var playTime = setInterval(function() {
-		counter--;
-		if (counter === 0) {
-			clearInterval(playTime);
-			endDispatcher(dispatcher);
-		}
-	}, 1000);
+	dispatcher.on('error', console.error);
+	if (counter) {
+		var playTime = setInterval(function() {
+			counter--;
+			if (counter === 0) {
+				clearInterval(playTime);
+				dispatcher.end();
+				endDispatcher(dispatcher, queued);
+			}
+		}, 1000);
+	}
 
 }
 
@@ -66,54 +76,42 @@ function grabInfo(message) {
 }
 
 export function hypeResponse(message, connection, list = false, len = 30, start) {
-	if (typeof message === 'object') {
-		if (message.author.username === 'Dnoop' && message.content.toLowerCase() === '!dave hype') {
-			say(message, 'Calling all Fraggers');
-			var newRando = randomIntInc(1, 3);
-
-			switch (true) {
-				case newRando === 1:
-					playHype('https://www.youtube.com/watch?v=ze5W8cDHcsQ', '26s', len);
-					break;
-				case newRando === 2:
-					playHype('https://www.youtube.com/watch?v=GoCOg8ZzUfg', '50s', len);
-					break;
-				case newRando === 3:
-					playHype('https://www.youtube.com/watch?v=VDvr08sCPOc', '0s', len);
-					break;
-				default:
-					genericResponse(message, 'How dare you speak to me');
-					break;
-			}
-
-		} else if (message.content.toLowerCase().indexOf('!dave play') > -1) {
-			const msgArr = message.content.split(' ');
-			let songInfo = grabInfo(message.content);
-
-			console.log(songInfo);
-			console.log(JSON.stringify(songInfo));
-			playHype(songInfo.song, songInfo.startTime || '0s', '15s');
-			// if (msgArr.length > 1) {
-			// 	song = message.content.split(' ')[2];
-			// } else {
-			// 	song = message;
-			// }
-
-			// getInfo(song, (err, info) => {
-			// 	if (err) {
-			// 		return err;
-			// 	}
-
-			// 	list.add({ url: song, title: info.title, votes: 0, user: message.author.username });
-
-			// 	play(list.head, connection, message);
-			// });
-		}
+	if (list) {
+		let audioLink = message.url;
+		let audioStart = message.start;
+		let audioLength = message.length;
+		playHype(audioLink, audioStart, audioLength, true);
 	} else {
-		console.log('here');
-		console.log(message);
-		console.log(start);
-		console.log(len);
-		playHype(message, start, len);
+
+		if (typeof message === 'object') {
+			if (message.author.username === 'Dnoop' && message.content.toLowerCase() === '!dave hype') {
+				// say(message, 'Calling all Fraggers');
+				var newRando = randomIntInc(1, 3);
+
+				switch (true) {
+					case newRando === 1:
+						playHype('https://www.youtube.com/watch?v=ze5W8cDHcsQ', '26s', len);
+						break;
+					case newRando === 2:
+						playHype('https://www.youtube.com/watch?v=GoCOg8ZzUfg', '50s', len);
+						break;
+					case newRando === 3:
+						playHype('https://www.youtube.com/watch?v=VDvr08sCPOc', '0s', len);
+						break;
+					default:
+						genericResponse(message, 'How dare you speak to me');
+						break;
+				}
+
+			} else if (message.content.toLowerCase().indexOf('!dave play') > -1) {
+				const msgArr = message.content.split(' ');
+				let songInfo = grabInfo(message.content);
+
+				global.pQueue.enqueue({ 'url': songInfo.song, 'start': songInfo.startTime, 'length': 30 }, 2);
+				message.channel.send('Playing ' + songInfo.song + ' sent to me by ' + message.author);
+			}
+		} else {
+			playHype(message, start, len);
+		}
 	}
 }
