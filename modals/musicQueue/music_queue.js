@@ -1,100 +1,171 @@
-import { MessageCollector } from 'discord.js';
+'use strict';
+
 import ytdl from 'ytdl-core';
+import { hypeResponse } from '../hypeResponse/hype_response.js';
 
-// class musicQueue {
-// 	constructor() {
-// 		this.head = null;
-// 		this.tail = null;
-// 		this.count = 0;
-// 	}
+let isPlaying = false;
+class QElement {
+	constructor(element, priority) {
+		this.element = element;
+		this.priority = priority;
+	}
+}
 
-// 	get length() {
-// 		return this.count;
-// 	}
+module.exports = class PriorityQueue {
 
-// 	add(data) {
-// 		const node = {
-// 			data: data,
-// 			next: null
-// 		}
-// 		// Save the first Node
-// 		const temp = this.head;
-// 		// Point head to the new Node
-// 		this.head = node;
-// 		// Add the rest of node behind the new first Node
-// 		this.head.next = temp;
-// 		this.count++;
-// 		if (this.count === 1) {
-// 			// If first node, 
-// 			// point tail to it as well
-// 			this.tail = this.head;
-// 		}
-// 	}
+	// An array is used to implement priority 
+	constructor() {
+		this.items = [];
+	}
 
-// 	addToTail(data) {
-// 		const node = {
-// 			data: data,
-// 			next: null
-// 		}
-// 		if (this.count === 0) {
-// 			// If this is the first Node, assign it to head
-// 			this.head = node;
-// 		} else {
-// 			// If not the first node, link it to the last node
-// 			this.tail.next = node;
-// 		}
-// 		this.tail = node;
-// 		this.count++;
-// 	}
-// }
+	checkAudioObj(audio) {
+		if (!audio.url)
+			return false;
+		if (!audio.start)
+			audio.start = '0s';
+		if (!audio.length && audio.url.indexOf('youtube') > -1)
+			audio.length = 30;
 
-export function play(list, connection, message) {
-	// console.log(currNode);
-	let dispatcher;
-	// if (list.data.url === undefined) {return collect.channel.sendMessage('Queue is empty').then(() => {
-	// songQueue.playing = false;
-	// msg.member.voiceChannel.leave();
-	// });}
-	console.log(list);
-	message.channel.sendMessage(`Playing: **${list.data.title}** as requested by: **${list.data.user}**`);
-	
-	dispatcher = connection.playStream(ytdl(list.data.url, { audioonly: true }));
-	const collector = new MessageCollector(message.channel, m => m.author.id === message.author.id);
+		return audio;
+	}
 
-	collector.on('collect', m => { // console.log(m);
-		console.log(m);
-		// console.log(m.content);
-		if (m.content.startsWith('pause')) {
-			// m.channel.send("").then(() => {
-			dispatcher.pause();
-			// });
-		} else if (m.content.startsWith('resume')) {
-			m.channel.send('resumed').then(() => {
-				dispatcher.resume();
-			});
-		} else if (m.content.startsWith('skip')) {
-			m.channel.send('skipped').then(() => {
-				dispatcher.end();
-			});
+	enqueue(element, priority) {
+		// creating object from queue element
+		console.log('ENQUEING ELEMENT');
+		console.log(element);
+		let audioObj = this.checkAudioObj(element);
+
+		if (!audioObj) {
+			console.log('Bad Audio Link: ' + element);
+			return;
 		}
-		// else if (m.content.startsWith(tokens.prefix + '!rtv')))
-	});
-	
 
-	dispatcher.on('end', () => {
-		collector.stop();
-		if (list.next) {
-			if (list.next != null) {
-				play(list.next, connection, message);
+		var qElement = new QElement(audioObj, priority);
+		var contain = false;
+
+		// iterating through the entire 
+		// item array to add element at the 
+		// correct location of the Queue 
+		for (var i = 0; i < this.items.length; i++) {
+			if (this.items[i].priority > qElement.priority) {
+				// Once the correct location is found it is 
+				// enqueued 
+				this.items.splice(i, 0, qElement);
+				contain = true;
+				break;
 			}
 		}
-	});
-	
-	dispatcher.on('error', (err) => {
-		return message.channel.sendMessage('error: ' + err).then(() => {
-			collector.stop();
-			// exit(0);
-			play(list.next, connection, message);
-		});
-	});
-}
+
+		// if the element have the highest priority 
+		// it is added at the end of the queue 
+		if (!contain) {
+			this.items.push(qElement);
+		}
+
+		if (this.isPlaying() === false) {
+			isPlaying = true;
+			this.play();
+		}
+
+	}
+
+	dequeue() {
+		if (this.isEmpty()) {
+			return 'Underflow';
+		}
+		return this.items.shift();
+	}
+
+	front() {
+		if (this.isEmpty()) {
+			return 'No elements in Queue';
+		}
+		return this.items[0];
+	}
+
+
+	rear() {
+		if (this.isEmpty()) {
+			return 'No elements in Queue';
+		}
+		return this.items[this.items.length - 1];
+	}
+
+	isEmpty() {
+		return this.items.length == 0;
+	}
+
+	isPlaying() {
+		return isPlaying;
+	}
+
+	printPQueue() {
+		var str = '';
+		for (var i = 0; i < this.items.length; i++) {
+			str += this.items[i].element + ' ';
+		}
+		return str;
+	}
+
+	getSongInfo() {
+		return this.front().element;
+	}
+
+	endDispatcher(dispatcher) {
+
+		this.dequeue();
+
+		if (!this.isEmpty()) {
+			this.play();
+		} else {
+			isPlaying = false;
+		}
+	}
+	// {'url': url, '', 'start': '0s', 'length': 30 }
+	play() {
+		console.log('CURRENT QUEUE');
+		console.log(this);
+		let queue = this;
+		let song = this.getSongInfo();
+		let audioLink = song.url;
+		let audioStart = song.start;
+		let audioLength = song.length;
+		let connection = global.connection;
+		let counter;
+
+		if (audioLink.indexOf('youtube') > -1) {
+			if (isNaN(audioLength) && audioLength.indexOf('s') > -1) {
+				counter = audioLength.split('s')[0];
+			} else {
+				counter = audioLength;
+			}
+			let dispatcher = connection.playStream(ytdl(audioLink, { begin: audioStart }))
+				.on('end', reason => {
+					if (reason === 'Stream is not generating quickly enough.') console.log('Song ended.');
+					else console.log(reason);
+					this.endDispatcher(dispatcher);
+				})
+				.on('error', error => console.error(error));
+
+			if (counter) {
+				var playTime = setInterval(function() {
+					counter--;
+					if (counter === 0) {
+						clearInterval(playTime);
+						// this.endDispatcher(dispatcher);
+						dispatcher.end();
+					}
+				}, 1000);
+			}
+		} else {
+			console.log('PLAYING FILE AUDIO');
+			let dispatcher = connection.playStream(audioLink)
+				.on('end', reason => {
+					if (reason === 'Stream is not generating quickly enough.') console.log('Song ended.');
+					else console.log(reason);
+					this.endDispatcher(dispatcher);
+				})
+				.on('error', error => console.error(error));
+		}
+	}
+};
