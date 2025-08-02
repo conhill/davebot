@@ -1,58 +1,79 @@
-import ytdl, { getInfo } from 'ytdl-core';
-import genericResponse, { say } from '../genericResponse/generic_response.js';
-var fs = require('fs');
+import { stream as playDlStream } from 'play-dl';
+import { genericResponse } from '../genericResponse/generic_response.js';
+import { createAudioPlayer, createAudioResource, AudioPlayerStatus } from '@discordjs/voice';
 
 
 function endDispatcher(dispatcher, queued) {
 	if (queued) {
 		console.log('END DISPATCHER IN HYPE')
-		global.pQueue.endDispatcher();
+		global.pQueue.endDispatcher(dispatcher);
 	}
 }
 
-function playHype(link, start, length, queued = false) {
-	let counter = false;
+async function playHype(link, start, length, queued = false) {
+	console.log(`Playing hype: ${link} starting at ${start} for ${length}s`);
+	
+	try {
+		// Get modern voice connection
+		let guildId = global.connection?.guild?.id || 
+		             global.connection?.joinConfig?.guildId || 
+		             Array.from(global.voiceHandler?.connections?.keys())?.[0];
+		
+		const modernConnection = global.voiceHandler?.getConnection(guildId);
+		
+		if (!modernConnection) {
+			console.error('No voice connection available for hype');
+			return;
+		}
 
-	if (length && isNaN(length) && length.indexOf('s') > -1) {
-		counter = length.split('s')[0];
-	} else {
-		counter = length;
-	}
+		let counter = false;
+		if (length && isNaN(length) && length.indexOf('s') > -1) {
+			counter = parseInt(length.split('s')[0]);
+		} else {
+			counter = parseInt(length);
+		}
 
-	let stream = link;
+		// Create audio player
+		const player = createAudioPlayer();
+		let resource;
 
-	if (link && link.indexOf('youtube') > -1) {
-		console.log('start: ' + start)
-		stream = ytdl(link, {
-			begin: start,
+		if (link && link.indexOf('youtube') > -1) {
+			console.log('Getting YouTube stream for hype...');
+			const streamInfo = await playDlStream(link, { quality: 2 });
+			resource = createAudioResource(streamInfo.stream, {
+				inputType: streamInfo.type
+			});
+		} else {
+			// For local files or other sources
+			resource = createAudioResource(link);
+		}
+
+		player.play(resource);
+		modernConnection.subscribe(player);
+
+		player.on(AudioPlayerStatus.Idle, () => {
+			endDispatcher(player, queued);
 		});
+
+		player.on('error', (error) => {
+			endDispatcher(player, queued);
+		});
+
+		// Handle timed playback
+		if (counter && counter > 0) {
+			console.log(`Hype will play for ${counter} seconds`);
+			setTimeout(() => {
+				player.stop();
+				endDispatcher(player, queued);
+			}, counter * 1000);
+		}
+
+	} catch (error) {
+		console.error('Error playing hype audio:', error);
+		if (queued) {
+			endDispatcher(null, queued);
+		}
 	}
-
-	let dispatcher = global.connection.playFile(stream, {
-		seek: 6,
-		volume: 0.8
-	});
-
-	dispatcher.on('start', () => {
-		global.connection.player.streamingData.pausedTime = 0;
-	});
-
-	dispatcher.on('end', () => {
-		endDispatcher(dispatcher, queued)
-	});
-
-	dispatcher.on('error', console.error);
-	if (counter) {
-		var playTime = setInterval(function() {
-			counter--;
-			if (counter === 0) {
-				clearInterval(playTime);
-				dispatcher.end();
-				endDispatcher(dispatcher, queued);
-			}
-		}, 1000);
-	}
-
 }
 
 function randomIntInc(low, high) {
@@ -75,43 +96,65 @@ function grabInfo(message) {
 	return info;
 }
 
-export function hypeResponse(message, connection, list = false, len = 30, start) {
+export async function hypeResponse(message, connection, list = false, len = 30, start) {
 	if (list) {
 		let audioLink = message.url;
 		let audioStart = message.start;
 		let audioLength = message.length;
-		playHype(audioLink, audioStart, audioLength, true);
+		await playHype(audioLink, audioStart, audioLength, true);
 	} else {
 
 		if (typeof message === 'object') {
-			if (message.author.username === 'Dnoop' && message.content.toLowerCase() === '!dave hype') {
-				// say(message, 'Calling all Fraggers');
+			if (message.author.username === 'Dnoop' && message.content.toLowerCase() == '!dave hype') {
+				// Use modern queue system instead of direct playback
+				message.channel.send('🔥 HYPE MUSIC INCOMING! 🔥');
+				
 				var newRando = randomIntInc(1, 3);
+				let hypeTrack;
 
-				switch (true) {
-					case newRando === 1:
-						playHype('https://www.youtube.com/watch?v=ze5W8cDHcsQ', '26s', len);
+				switch (newRando) {
+					case 1:
+						hypeTrack = {
+							'url': 'https://www.youtube.com/watch?v=ze5W8cDHcsQ',
+							'start': '26s',
+							'length': len
+						};
 						break;
-					case newRando === 2:
-						playHype('https://www.youtube.com/watch?v=GoCOg8ZzUfg', '50s', len);
+					case 2:
+						hypeTrack = {
+							'url': 'https://www.youtube.com/watch?v=GoCOg8ZzUfg',
+							'start': '50s',
+							'length': len
+						};
 						break;
-					case newRando === 3:
-						playHype('https://www.youtube.com/watch?v=VDvr08sCPOc', '0s', len);
+					case 3:
+						hypeTrack = {
+							'url': 'https://www.youtube.com/watch?v=VDvr08sCPOc',
+							'start': '0s',
+							'length': len
+						};
 						break;
 					default:
 						genericResponse(message, 'How dare you speak to me');
-						break;
+						return;
 				}
+
+				// Queue the hype track
+				global.pQueue.enqueue(hypeTrack, 1); // High priority
 
 			} else if (message.content.toLowerCase().indexOf('!dave play') > -1) {
 				const msgArr = message.content.split(' ');
 				let songInfo = grabInfo(message.content);
 
-				global.pQueue.enqueue({ 'url': songInfo.song, 'start': songInfo.startTime, 'length': 30 }, 2);
-				message.channel.send('Playing ' + songInfo.song + ' sent to me by ' + message.author);
+				global.pQueue.enqueue({ 
+					'url': songInfo.song, 
+					'start': songInfo.startTime || '0s', 
+					'length': 30 
+				}, 2);
+				message.channel.send('🎵 Queued: ' + songInfo.song + ' (requested by ' + message.author.displayName + ')');
 			}
 		} else {
-			playHype(message, start, len);
+			await playHype(message, start, len);
 		}
 	}
 }
