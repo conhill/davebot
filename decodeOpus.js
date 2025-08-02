@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const opus = require('node-opus');
+// const opus = require('node-opus');
 
 const rate = 48000;
 const frame_size = 1920;
@@ -13,6 +13,7 @@ let complete = 0;
 
 let getDecodedFrame = (frameString, encoder, filename) => {
 	let buffer = Buffer.from(frameString, 'hex');
+	
 	try {
 		buffer = encoder.decode(buffer, frame_size);
 	} catch (err) {
@@ -30,12 +31,16 @@ let convertOpusStringToRawPCM = (inputPath, filename, cb) => {
 	total++;
 	let encoder = new opus.OpusEncoder(rate, channels);
 	const inputStream = fs.createReadStream(inputPath);
+	const outputStream = fs.createWriteStream(path.join(path.dirname(inputPath), `${filename}.raw_pcm`));
+	let data = '';
+
 	inputStream.on('error', function(err){
+		console.log("error in input stream");
 		console.log(err);
 		// throw err;
 	});
-	const outputStream = fs.createWriteStream(path.join(path.dirname(inputPath), `${filename}.raw_pcm`));
-	let data = '';
+
+	//chunk into
 	inputStream.on('data', chunk => {
 		data += chunk.toString();
 		const frames = data.split(',');
@@ -51,37 +56,22 @@ let convertOpusStringToRawPCM = (inputPath, filename, cb) => {
 			}
 		}
 	});
+
 	inputStream.on('end', () => {
 		outputStream.end((err) => {
 			if (err) {
+				console.log("error in output stream");
 				console.error(err);
 			}
 			complete++;
 			console.log(`Completed ${100 * complete / total}%`);
 		});
 	});
+
 	console.log('not yet translating'); 
 	cb();
 };
 
-let convertAllOpusStringToRawPCM = (inputDirectory) => {
-	fs.readdir(inputDirectory, (err, files) => {
-		if (err) {
-			console.error(`Could not read input due to: ${err}`);
-		} else {
-			files.forEach((file) => {
-				let ext = path.extname(file);
-				if (ext === '.opus_string') {
-					convertOpusStringToRawPCM(path.join(inputDirectory, file), path.basename(file, ext));
-				}
-			});
-		}
-	});
-};
-
-//let inputDirectory = path.join('podcasts', process.argv[2]);
-
-//convertAllOpusStringToRawPCM(inputDirectory);
 module.exports = {
 	convertOpusStringToRawPCM: convertOpusStringToRawPCM
 };

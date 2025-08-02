@@ -1,207 +1,256 @@
 'use strict';
 
-var express = require('express');
-var wtf = require('wtfnode');
-import { Client } from 'discord.js';
-// import Crunker from 'crunker';
-const bot = new Client({ autoReconnect: true });
-import ytdl, { getInfo } from 'ytdl-core';
+import express from 'express';
+import bodyParser from 'body-parser';
+import { Client, GatewayIntentBits } from 'discord.js';
+import { ModernVoiceHandler } from './modern-voice-example.js';
+import { GoogleTTSHandler } from './google-tts-enhanced.js';
+import { GeminiAIHandler } from './gemini-ai-handler.js';
+import PriorityQueue from './modals/musicQueue/music_queue.js';
 import { genericResponse } from './modals/genericResponse/generic_response.js';
 import { hypeResponse } from './modals/hypeResponse/hype_response.js';
 import { mtgResponse } from './modals/mtgResponse/mtg_response.js';
 import { helpResponse } from './modals/helpResponse/help_response.js';
-// import musicQueue, { add, play } from './classes/musicQueue.js';
-import { onOpus, recordAudio } from './js/voice.js';
-// import { Queue } from './modals/musicQueue/music_queue.js'
-import PriorityQueue from './modals/musicQueue/music_queue.js'
-
-
-
 import 'dotenv/config';
 
+const app = express();
 
-let isReady = true;
-const opus = require('node-opus');
-const path = require('path');
-const recordingsPath = './recordings';
-const fs = require('fs');
-var listenStreams = new Map();
-let originalPath;
+// Initialize handlers
+const voiceHandler = new ModernVoiceHandler();
+const ttsHandler = new GoogleTTSHandler();
+const aiHandler = new GeminiAIHandler();
 
-/* Global Variables */
+// Initialize services
+ttsHandler.initializeGoogleTTS();
+aiHandler.initializeGemini();
 
+const bot = new Client({
+	intents: [
+		GatewayIntentBits.Guilds,
+		GatewayIntentBits.GuildMessages,
+		GatewayIntentBits.MessageContent,
+		GatewayIntentBits.GuildMembers,
+		GatewayIntentBits.GuildVoiceStates, // Required for voice connections
+	],
+});
+
+const fetch = (await import('node-fetch')).default;
+
+// Global Variables
 global.connection;
 global.channel;
 global.userTalking = false;
 global.pQueue = new PriorityQueue();
 global.streaming = false;
 global.reLoggedOnce = false;
+global.voiceHandler = voiceHandler;
+global.ttsHandler = ttsHandler;
+global.aiHandler = aiHandler;
 
-/******************/
-const streamOptions = {
-	seek: 0,
-	volume: .5
+// Constants
+const YOUTUBE_SONGS = {
+	NuclearLink: 'https://www.youtube.com/watch?v=6FFH3lOP_9M',
+	'Price of Quality': 'https://www.youtube.com/watch?v=eqwiC93zmxI',
+	tagowar: 'https://www.youtube.com/watch?v=ITQB_n9bqCc',
+	bbp: 'https://www.youtube.com/watch?v=U9FzgsF2T-s',
+	KingKoopa: 'https://www.youtube.com/watch?v=SzTX5E1t8og',
+};
+const RAGE_SONG = 'https://www.youtube.com/watch?v=2LXRKTjpDm8';
+const INITIAL_SOUND = './sound/icecubes.mp3';
+
+// Bot ready event handler
+const fireReady = () => {
+	console.log('Bot is online.');
+	console.log('Running on port 3000.');
 };
 
+app.use(bodyParser.json());
 
-var fireReady = () => {
-	console.log('I am ready!');
-	console.log('running on port 3000');
+// Join voice channel using modern Discord.js syntax
+const JoinChannel = (id) => {
+	const guild = bot.guilds.cache.values().next().value;
+	const channel = bot.channels.cache.get(id);
+
+	if (!channel) {
+		console.error(`Voice channel ${id} not found.`);
+		return;
+	}
+	// Start Voice Connection
+	// Handles audio playback and voice state management
+	const connection = voiceHandler.joinChannel(guild, id);
+
+	if (connection) {
+		global.connection = connection;
+		console.log('Joined voice channel:', channel.name);
+		console.log('Voice connection established.');
+
+		// Play initial sound after connection is ready
+		connection.on('stateChange', (oldState, newState) => {
+			if (newState.status === 'ready' && oldState.status !== 'ready') {
+				setTimeout(() => {
+					global.pQueue.enqueue({
+						url: INITIAL_SOUND,
+						start: '0s'
+					}, 1);
+				}, 1000);
+			}
+		});
+	}
 };
 
-//re-log
-var logBackIn = (bot, channel, cb) => {
-	if (!global.reLoggedOnce) {
-		global.reLoggedOnce = true;
+// Message handler
+bot.on('messageCreate', message => {
+	if (message.author.bot) return;
 
-		setTimeout(function() {
-			cb();
-		}, 500);
+	const messageLowerCase = message.content.toLowerCase();
 
+	// Generic !Dave command
+	if (messageLowerCase === '!dave') {
+		genericResponse(message);
+	}
+
+	// Play a song using play-dl library
+	if (messageLowerCase.includes('!dave play') && !messageLowerCase.includes('youtu.be')) {
+		const song = message.content.split(' ')[2];
+		global.pQueue.enqueue({
+				url: song,
+				start: '0s',
+				length: 30
+		}, 2);
+		message.delete().catch(console.error);
 	} else {
-		console.log('NOW TRUE');
-		cb();
+		message.channel.send('Incorrect YouTube link format. Use youtube.com/watch?v= links.');
 	}
-}
+	
 
-//Alert for when bot is online
+	// MTG response
+	if (messageLowerCase === '!dave mtg') {
+		mtgResponse(message);
+	}
+
+	// Help response
+	if (messageLowerCase === '!dave help') {
+		helpResponse(message);
+	}
+
+	// Play hype music using TTS
+	if (messageLowerCase === '!dave hype' && message.author.username === 'Dnoop') {
+		message.channel.send('@everyone');
+		ttsHandler.generatePersonalizedResponse(
+			"Oh snap! Time to get hyped! Let's game on, team!",
+			message.author.id
+		).then(audioPath => {
+			if (audioPath && global.pQueue) {
+				global.pQueue.enqueue({
+					url: audioPath,
+					start: '0s'
+				}, 1);
+			}
+		}).catch(error => {
+			console.error('TTS Error:', error);
+		});
+	}
+
+	// Friendly gamer responses
+	if (messageLowerCase === '!dave gaming') {
+		ttsHandler.generatePersonalizedResponse(
+			"Hey gamers! What are we playing today? I'm always down for a good session!",
+			message.author.id
+		).then(audioPath => {
+			if (audioPath && global.pQueue) {
+				global.pQueue.enqueue({
+					url: audioPath,
+					start: '0s'
+				}, 1);
+			}
+		}).catch(error => {
+			console.error('TTS Error:', error);
+		});
+	}
+
+	if (messageLowerCase === '!dave gg') {
+		const ggResponses = [
+			"GG everyone! That was an epic match!",
+			"Good game! You all played awesome!",
+			"GG! Ready for another round?",
+			"Nice game! That was some solid gameplay!"
+		];
+		const randomResponse = ggResponses[Math.floor(Math.random() * ggResponses.length)];
+
+		ttsHandler.generatePersonalizedResponse(
+			randomResponse,
+			message.author.id
+		).then(audioPath => {
+			if (audioPath && global.pQueue) {
+				global.pQueue.enqueue({
+					url: audioPath,
+					start: '0s'
+				}, 1);
+			}
+		}).catch(error => {
+			console.error('TTS Error:', error);
+		});
+	}
+
+	// TTS usage statistics command
+	if (messageLowerCase === '!dave stats' && message.author.username === 'Dnoop') {
+		const stats = ttsHandler.getUsageStats();
+		const statsMessage = `TTS Usage Stats:
+Characters used: ${stats.monthlyCharacterCount}
+Estimated cost: $${stats.estimatedCost.toFixed(2)}
+Free tier remaining: ${stats.remainingFreeChars} chars`;
+
+		message.channel.send(statsMessage);
+	}
+});
+
+// Voice state update handler
+// Users joining or leaving voice channels
+bot.on('voiceStateUpdate', (oldState, newState) => {
+	const member = newState.member;
+
+	// User joined a voice channel
+	if (!oldState.channel && newState.channel) {
+		console.log('Enqueuing song for:', member.displayName);
+		const song = YOUTUBE_SONGS[member.displayName];
+		const startTimes = {
+			NuclearLink: '15s',
+			'Price of Quality': '5s',
+			tagowar: '17s',
+			bbp: '17s',
+			KingKoopa: '0s',
+		};
+		const length = 30;
+		if (song) {
+			global.pQueue.enqueue({
+				url: song,
+				start: startTimes[member.displayName] || '0s',
+				length: length
+			}, 2);
+		} else {
+			console.warn(`${member.displayName} joined. No song assigned.`);
+		}
+	}
+	// User left a voice channel
+	else if (oldState.channel && !newState.channel) {
+		global.pQueue.enqueue({
+			url: RAGE_SONG,
+			start: '0s'
+		}, 2);
+	}
+});
+
+// Bot event handlers
+bot.on('error', console.error);
+
 bot.on('ready', () => {
-
 	fireReady();
-
-	var JoinChannel = function(id) {
-		global.channel = bot.channels.get(id);
-
-		global.channel.join()
-			.then(function(connection) {
-
-				global.connection = connection;
-
-				let receiver = connection.createReceiver();
-
-				global.pQueue.enqueue({ 'url': './sound/icecubes.mp3', 'start': '0s' }, 1);
-
-				//When A User is Speaking
-				if (global.userTalking === false) {
-
-					global.connection.on('speaking', (user, speaking) => {
-						if (user.username === 'Dnoop' && !global.pQueue.isPlaying()) {
-							global.userTalking = true;
-							recordAudio(user, speaking);
-						}
-					});
-
-					receiver.on('opus', function(user, data) {
-						onOpus(user, data);
-					});
-				}
-
-				//Rage Quit
-				bot.on('voiceStateUpdate', (oldMember, newMember) => {
-					let newUserChannel = newMember.voiceChannel;
-					let oldUserChannel = oldMember.voiceChannel;
-					// if (isReady) {
-					if (oldUserChannel === undefined && newUserChannel !== undefined) {
-						let song;
-						if (global.streaming === true) {
-							global.channel.send("I'm streaming, dont say anything too racist");
-						}
-						switch (true) {
-							case newMember.displayName === 'NuclearLink':
-								song = 'https://www.youtube.com/watch?v=6FFH3lOP_9M';
-								// hypeResponse(song, connection, list, 30, '15s');
-								global.pQueue.enqueue({ 'url': song, 'start': '15s', 'length': 30 }, 2);
-								break;
-							case newMember.displayName === 'Price of Quality':
-								song = 'https://www.youtube.com/watch?v=eHd7yjgSxj4';
-								global.pQueue.enqueue({ 'url': song, 'start': '5s', 'length': 30 }, 2);
-								break;
-							case newMember.displayName === 'tagowar':
-								song = 'https://www.youtube.com/watch?v=ITQB_n9bqCc';
-								global.pQueue.enqueue({ 'url': song, 'start': '17s', 'length': 30 }, 2);
-								break;
-							case newMember.displayName === 'bbp':
-								song = 'https://www.youtube.com/watch?v=U9FzgsF2T-s';
-								hypeResponse(song, connection, false, 30, '17s');
-								break;
-							case newMember.displayName === 'KingKoopa':
-								song = '/https://www.youtube.com/watch?v=SzTX5E1t8og';
-								hypeResponse(song, connection, false, 30, '0s');
-								break;
-							default:
-								console.warn(`${newMember.displayName}! Joined. No song`);
-								break;
-						}
-						//new user
-					} else if (newUserChannel === undefined) {
-
-						let rage = 'https://www.youtube.com/watch?v=2LXRKTjpDm8';
-						// hypeResponse(rage, connection, false);
-						lobal.pQueue.enqueue({ 'url': rage, 'start': '0s' }, 2);
-					}
-					// }
-				});
-
-
-				bot.on('message', message => {
-					let messageLowerCase = message.content.toLowerCase();
-					//Generic !Dave command
-					if (messageLowerCase === '!dave')
-						genericResponse(message);
-
-					//Play a song
-					if (messageLowerCase.indexOf('!dave play') > -1) {
-						if (messageLowerCase.indexOf('youtu.be') === -1) {
-							let song = message.content.split(' ')[2];
-							global.pQueue.enqueue({ 'url': song, 'start': '0s', 'length': 30 }, 2);
-							// hypeResponse(message, connection, false, 60);
-							message.delete();
-						} else if (messageLowerCase.indexOf('youtu.be') > -1) {
-							message.channel.send('Wrong youtube link, idiot.');
-						}
-					}
-
-					//This seems to fail randomly
-					if (messageLowerCase === '!dave mtg')
-						mtgResponse(message);
-
-					//This seems to fail randomly
-					if (messageLowerCase === '!dave help')
-						helpResponse(message);
-
-					//Play hype music
-					if (messageLowerCase === '!dave hype' && message.author.username === 'Dnoop') {
-						message.channel.send('@everyone');
-						hypeResponse(message, connection, false, 20);
-					}
-
-					//Queue up song
-					if (messageLowerCase.indexOf('!dave queue') > -1) {
-						var song = message.content.split(' ')[2];
-						getInfo(song, (err, info) => {
-							if (err) {
-								return err;
-							}
-							add({
-								url: song,
-								title: info.title,
-								votes: 0,
-								user: message.author.username
-							});
-						});
-					}
-
-					if (messageLowerCase.indexOf('!dave test') > -1) {
-						play(list.head, connection, message);
-					}
-				});
-
-
-			}).catch(console.log);
-	}
-
 	JoinChannel(process.env.VOICEROOM);
 });
 
+bot.on('disconnect', (erMsg, code) => {
+	console.log('Bot disconnected from Discord with code', code, 'Reason:', erMsg);
+	JoinChannel(process.env.VOICEROOM);
+});
 
 bot.login(process.env.ROOMKEY);
