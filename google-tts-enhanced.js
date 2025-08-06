@@ -41,6 +41,12 @@ export class GoogleTTSHandler {
      * @param {object} options - Voice and audio configuration.
      * @returns {Promise<string|null>} - Path to saved audio file or null on failure.
      */
+    /**
+     * Generates speech audio from text using Google Cloud TTS.
+     * Returns an object with the file path and an automatic cleanup callback.
+     * Usage: const { path, cleanup } = await ttsHandler.generateSpeechResponseEnhanced(...);
+     * After playback: await cleanup();
+     */
     async generateSpeechResponseEnhanced(text, userId, options = {}) {
         if (!this.ttsClient) {
             this.initializeGoogleTTS();
@@ -81,7 +87,17 @@ export class GoogleTTSHandler {
                 const extension = settings.audioEncoding.toLowerCase() === 'mp3' ? 'mp3' : 'wav';
                 const outputPath = `./sound/response-${userId}-${Date.now()}.${extension}`;
                 fs.writeFileSync(outputPath, response.audioContent, 'binary');
-                return outputPath;
+                // Return path and cleanup callback
+                return {
+                    path: outputPath,
+                    cleanup: async () => {
+                        try {
+                            await fs.promises.unlink(outputPath);
+                        } catch (e) {
+                            // Ignore if already deleted
+                        }
+                    }
+                };
             }
             return null;
         } catch (error) {

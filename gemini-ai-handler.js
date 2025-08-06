@@ -10,6 +10,30 @@ export class GeminiAIHandler {
         this.genAI = null;
         this.model = null;
         this.monthlyTokenCount = 0;
+        this.conversationHistory = new Map(); // userId -> [ {role, content} ]
+    }
+
+    // Helper: Get conversation history for user
+    getUserHistory(userId) {
+        return this.conversationHistory.get(userId) || [];
+    }
+
+    // Helper: Save conversation history for user
+    setUserHistory(userId, history) {
+        this.conversationHistory.set(userId, history);
+    }
+
+    // Helper: Build prompt from history and context
+    buildPrompt(history, context) {
+        let prompt = history.map(msg => `${msg.role === 'user' ? 'User:' : 'Dave:'} ${msg.content}`).join('\n');
+        if (context === 'general') {
+            prompt = `You are Dave, a friendly gamer bot. Respond naturally and conversationally to the user.\n${prompt}`;
+        } else if (context === 'strategy') {
+            prompt = `You are Dave, a gaming strategist. Give a quick strategy tip for speech.\n${prompt}`;
+        } else if (context === 'hype') {
+            prompt = `You are Dave, getting hyped about gaming. React enthusiastically for speech.\n${prompt}`;
+        }
+        return prompt;
     }
 
     /**
@@ -37,13 +61,13 @@ export class GeminiAIHandler {
      * @param {number} inputTokens - Estimated input tokens used.
      * @param {number} outputTokens - Estimated output tokens used.
      */
-    trackTokenUsage(inputTokens, outputTokens) {
-        this.monthlyTokenCount += inputTokens + outputTokens;
-        if (this.monthlyTokenCount > 45000) {
-            // Approaching free tier limit
-            // Consider alerting or throttling usage here if needed
-        }
-    }
+    // trackTokenUsage(inputTokens, outputTokens) {
+    //     this.monthlyTokenCount += inputTokens + outputTokens;
+    //     if (this.monthlyTokenCount > 45000) {
+    //         // Approaching free tier limit
+    //         // Consider alerting or throttling usage here if needed
+    //     }
+    // }
 
     /**
      * Analyzes a Magic: The Gathering card and generates friendly gamer commentary.
@@ -75,7 +99,7 @@ Avoid special characters, acronyms, or text formatting. Use words that sound nat
             // Estimate token usage (approximate)
             const estimatedInputTokens = Math.ceil(prompt.length / 4);
             const estimatedOutputTokens = Math.ceil(analysis.length / 4);
-            this.trackTokenUsage(estimatedInputTokens, estimatedOutputTokens);
+            // this.trackTokenUsage(estimatedInputTokens, estimatedOutputTokens);
 
             return analysis;
         } catch (error) {
@@ -91,28 +115,23 @@ Avoid special characters, acronyms, or text formatting. Use words that sound nat
      * @returns {Promise<string|null>} Commentary or null if unavailable.
      */
     async analyzeGameContent(content, context = 'general') {
-        if (!this.model) {
-            return null;
-        }
+        if (!this.model) return null;
         try {
-            const prompts = {
-                'general': `You are Dave, a friendly gamer bot. Comment on this gaming content in under 30 words for speech: ${content}`,
-                'strategy': `You are Dave, a gaming strategist. Give a quick strategy tip for speech in under 30 words: ${content}`,
-                'hype': `You are Dave, getting hyped about gaming. React enthusiastically for speech in under 30 words: ${content}`
-            };
-            const prompt = prompts[context] || prompts['general'];
+            let userId = arguments[2] || 'default';
+            let history = this.getUserHistory(userId);
+            history.push({ role: 'user', content });
+            history = history.slice(-6);
+            let prompt = this.buildPrompt(history, context);
             const result = await this.model.generateContent(prompt);
             const response = await result.response;
             const analysis = response.text();
-
+            history.push({ role: 'dave', content: analysis });
+            this.setUserHistory(userId, history);
             // Estimate token usage (approximate)
-            const estimatedInputTokens = Math.ceil(prompt.length / 4);
-            const estimatedOutputTokens = Math.ceil(analysis.length / 4);
-            this.trackTokenUsage(estimatedInputTokens, estimatedOutputTokens);
-
+            // const estimatedInputTokens = Math.ceil(prompt.length / 4);
+            // const estimatedOutputTokens = Math.ceil(analysis.length / 4);
             return analysis;
         } catch (error) {
-            // Analysis failed
             return null;
         }
     }
@@ -124,8 +143,8 @@ Avoid special characters, acronyms, or text formatting. Use words that sound nat
     getUsageStats() {
         return {
             monthlyTokenCount: this.monthlyTokenCount,
-            estimatedCost: (this.monthlyTokenCount / 1000) * 0.00075, // Rough cost estimate
-            remainingFreeTokens: Math.max(0, 50000 - this.monthlyTokenCount) // Free tier estimate
+            estimatedCost: (this.monthlyTokenCount / 1000) * 0.00075,
+            remainingFreeTokens: Math.max(0, 50000 - this.monthlyTokenCount)
         };
     }
 }

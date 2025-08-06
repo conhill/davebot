@@ -329,103 +329,57 @@ export class ModernVoiceHandler {
     }
 
     // Process the transcribed text (replaces your handleSpeech call)
-    processTranscription(userId, user, transcribedText, pcmPath, wavPath) {
-        console.log(`User ${user.username} said: "${transcribedText}"`);
-        const normalizedText = transcribedText.toLowerCase();
-        let responseText = null;
-        let isSimpleCommand = false;
+    isDaveCommand(normalizedText) {
+        return normalizedText.includes('dave');
+    }
 
-        // Check for 'dave' in the text
-        if (normalizedText.includes('dave')) {
-            // List of simple commands
-            const simpleCommands = [
-                'dave play',
-                'dave help',
-                'dave drop that',
-                'dave seeing red',
-                'dave word of the day',
-                'dave straight up',
-                'dave thank',
-                'dave good morning',
-                'dave hello'
-            ];
-            for (const cmd of simpleCommands) {
-                if (normalizedText.startsWith(cmd)) {
-                    isSimpleCommand = true;
-                    break;
-                }
-            }
+    isGreeting(normalizedText) {
+        return (
+            normalizedText.startsWith('hey dave') ||
+            normalizedText.startsWith('hello dave') ||
+            normalizedText.startsWith('hi dave')
+        );
+    }
 
-            if (isSimpleCommand) {
-                // Handle simple commands as before
-                if (normalizedText.includes('play')) {
-                    const searchTerm = normalizedText.split('dave play')[1];
-                    responseText = `Playing ${searchTerm} for you now.`;
-                } else if (normalizedText.includes('help')) {
-                    responseText = "I can play music, tell jokes, or control your lights. Just ask!";
-                } else if (normalizedText.includes('drop that')) {
-                    responseText = "Oh yeah, dropping that beat for you!";
-                } else if (normalizedText.includes('seeing red')) {
-                    responseText = "Changing the lights to red mode!";
-                } else if (normalizedText.includes('word of the day')) {
-                    responseText = `Today's word of the day is ${global.wordOfTheDay || 'awesome'}. Use it in a sentence!`;
-                } else if (normalizedText.includes('straight up')) {
-                    responseText = "Straight up, that's what I'm talking about!";
-                } else if (normalizedText.includes('thank')) {
-                    responseText = "You're very welcome! Happy to help.";
-                } else if (
-                    normalizedText.startsWith('hey dave') ||
-                    normalizedText.startsWith('hello dave') ||
-                    normalizedText.startsWith('hi dave')
-                ) {
-                    // Dynamic, personalized greeting
-                    const greetings = [
-                        `Yo ${user.username}, what's up?`,
-                        `Hey ${user.username}! How's it going?`,
-                        `Hi ${user.username}, what can I do for you today?`,
-                        `Hello ${user.username}! Need anything?`,
-                        `Hey ${user.username}, I'm here!`
-                    ];
-                    responseText = greetings[Math.floor(Math.random() * greetings.length)];
-                } else if (normalizedText.includes('good morning')) {
-                    responseText = `Good morning, ${user.username}! Ready to rock today?`;
-                } else if (normalizedText.includes('hello')) {
-                    responseText = `Hello ${user.username}! Hope you're having a great day.`;
-                } else {
-                    // Default fallback for simple commands: respond naturally
-                    responseText = `Sure thing! Let me know if you need anything else, ${user.username}.`;
-                }
-                // Generate audio response using Google Cloud Text-to-Speech
-                if (responseText) {
-                    this.generateSpeechResponse(responseText, userId, user);
-                }
-            } else {
-                // Not a simple command, run through Gemini AI for a conversational response
-                if (global.aiHandler && typeof global.aiHandler.analyzeGameContent === 'function') {
-                    global.aiHandler.analyzeGameContent(transcribedText, 'general')
-                        .then(aiResponse => {
-                            if (aiResponse) {
-                                // Remove any leading 'Hey there!' from AI response
-                                let cleanResponse = aiResponse.replace(/^hey there[!,. ]*/i, '');
-                                this.generateSpeechResponse(cleanResponse, userId, user);
-                            } else {
-                                this.generateSpeechResponse("Sorry, I couldn't think of a good response.", userId, user);
-                            }
-                        })
-                        .catch(error => {
-                            console.error('Error with Gemini AI:', error);
-                            this.generateSpeechResponse("Sorry, I couldn't think of a good response.", userId, user);
-                        });
-                } else {
-                    this.generateSpeechResponse("Sorry, I couldn't think of a good response.", userId, user);
-                }
-            }
+    getGreeting(user, normalizedText) {
+        const greetings = [
+            `Yo ${user.username}, what's up?`,
+            `Hey ${user.username}! How's it going?`,
+            `Hi ${user.username}, what can I do for you today?`,
+            `Hello ${user.username}! Need anything?`,
+            `Hey ${user.username}, I'm here!`
+        ];
+        return greetings[Math.floor(Math.random() * greetings.length)];
+    }
+
+    getSimpleCommandResponse(normalizedText, user) {
+        if (normalizedText.includes('play')) {
+            const searchTerm = normalizedText.split('dave play')[1];
+            return `Playing ${searchTerm} for you now.`;
+        } else if (normalizedText.includes('help')) {
+            return "I can play music, tell jokes, or control your lights. Just ask!";
+        } else if (normalizedText.includes('drop that')) {
+            return "Oh yeah, dropping that beat for you!";
+        } else if (normalizedText.includes('seeing red')) {
+            return "Changing the lights to red mode!";
+        } else if (normalizedText.includes('word of the day')) {
+            return `Today's word of the day is ${global.wordOfTheDay || 'awesome'}. Use it in a sentence!`;
+        } else if (normalizedText.includes('straight up')) {
+            return "Straight up, that's what I'm talking about!";
+        } else if (normalizedText.includes('thank')) {
+            return "You're very welcome! Happy to help.";
+        } else if (this.isGreeting(normalizedText)) {
+            return this.getGreeting(user, normalizedText);
+        } else if (normalizedText.includes('good morning')) {
+            return `Good morning, ${user.username}! Ready to rock today?`;
+        } else if (normalizedText.includes('hello')) {
+            return `Hello ${user.username}! Hope you're having a great day.`;
         } else {
-            // No 'dave' detected, ignore or respond generically
-            console.log('No Dave command detected in speech.');
+            return `Sure thing! Let me know if you need anything else, ${user.username}.`;
         }
+    }
 
-        // Clean up files after processing
+    cleanupAudioFiles(pcmPath, wavPath) {
         setTimeout(() => {
             try {
                 fs.unlinkSync(pcmPath);
@@ -435,6 +389,60 @@ export class ModernVoiceHandler {
                 console.error('Error cleaning up files:', err);
             }
         }, 5000);
+    }
+    isSimpleCommand(normalizedText) {
+        const simpleCommands = [
+            'dave play',
+            'dave help',
+            'dave drop that',
+            'dave seeing red',
+            'dave word of the day',
+            'dave straight up',
+            'dave thank',
+            'dave good morning',
+            'dave hello'
+        ];
+        for (const cmd of simpleCommands) {
+            if (normalizedText.startsWith(cmd)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    processTranscription(userId, user, transcribedText, pcmPath, wavPath) {
+        console.log(`User ${user.username} said: "${transcribedText}"`);
+        const normalizedText = transcribedText.toLowerCase();
+        // Check for 'dave' in the text
+        if (this.isDaveCommand(normalizedText)) {
+            if (this.isSimpleCommand(normalizedText)) {
+                const responseText = this.getSimpleCommandResponse(normalizedText, user);
+                if (responseText) {
+                    this.generateSpeechResponse(responseText, userId, user);
+                }
+            } else {
+                // Not a simple command, run through Gemini AI for a conversational response
+                if (global.aiHandler && typeof global.aiHandler.analyzeGameContent === 'function') {
+                    global.aiHandler.analyzeGameContent(transcribedText, 'general', userId)
+                        .then(aiResponse => {
+                            if (aiResponse) {
+                                let cleanResponse = aiResponse.replace(/^hey there[!,. ]*/i, '');
+                                this.generateSpeechResponse(cleanResponse, userId, user);
+                            } else {
+                                this.generateSpeechResponse("Slime, I'm too fried too think of a good response.", userId, user);
+                            }
+                        })
+                        .catch(error => {
+                            this.generateSpeechResponse("Slime, I'm too fried too think of a good response.", userId, user);
+                        });
+                } else {
+                    this.generateSpeechResponse("Slime, I'm too fried too think of a good response.", userId, user);
+                }
+            }
+        } else {
+            console.log('No Dave command detected in speech.');
+        }
+        // Clean up files after processing
+        this.cleanupAudioFiles(pcmPath, wavPath);
     }
 
     // Generate speech response using Google Cloud Text-to-Speech
