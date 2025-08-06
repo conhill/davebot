@@ -1,3 +1,102 @@
+// Helper: Get guild ID from connection or global voiceHandler
+function getGuildId(connection) {
+	return connection?.guild?.id || connection?.joinConfig?.guildId || Array.from(global.voiceHandler?.connections?.keys())?.[0];
+}
+
+// Helper: Play local audio file (TTS, SFX, etc.)
+async function playLocalFile(audioLink, queue, song) {
+	const { createAudioPlayer, createAudioResource, AudioPlayerStatus } = await import('@discordjs/voice');
+	const { createReadStream } = await import('fs');
+	let guildId = getGuildId(global.connection);
+	const modernConnection = global.voiceHandler?.getConnection(guildId);
+	let cleanupFn = null;
+	// If this is a TTS file, it may be an object with path/cleanup
+	if (typeof song.audioObj === 'object' && song.audioObj.path && song.audioObj.cleanup) {
+		audioLink = song.audioObj.path;
+		cleanupFn = song.audioObj.cleanup;
+	}
+	if (modernConnection) {
+		const player = createAudioPlayer();
+		const resource = createAudioResource(createReadStream(audioLink));
+		player.play(resource);
+		modernConnection.subscribe(player);
+		player.on(AudioPlayerStatus.Playing, () => {
+			console.log('Queue audio is playing');
+		});
+		player.on(AudioPlayerStatus.Idle, async () => {
+			console.log('Queue audio finished');
+			if (cleanupFn) await cleanupFn();
+			queue.endDispatcher(player);
+		});
+		player.on('error', async (error) => {
+			console.error('Queue audio player error:', error);
+			if (cleanupFn) await cleanupFn();
+			queue.endDispatcher(player);
+		});
+		// Timed playback
+		let counter = getAudioLength(song);
+		if (counter > 0) {
+			setTimeout(async () => {
+				player.stop();
+				if (cleanupFn) await cleanupFn();
+				queue.endDispatcher(player);
+			}, counter * 1000);
+		}
+	} else {
+		console.log('No modern voice connection available, retrying in 2 seconds...');
+		setTimeout(() => queue.play(), 2000);
+	}
+}
+
+// Helper: Play YouTube audio
+async function playYouTube(audioLink, queue, song) {
+	const { createAudioPlayer, createAudioResource, AudioPlayerStatus } = await import('@discordjs/voice');
+	const { stream: playDlStream } = await import('play-dl');
+	let guildId = getGuildId(global.connection);
+	const modernConnection = global.voiceHandler?.getConnection(guildId);
+	if (modernConnection) {
+		const streamInfo = await playDlStream(audioLink, { quality: 2 });
+		const resource = createAudioResource(streamInfo.stream, { inputType: streamInfo.type });
+		const player = createAudioPlayer();
+		player.play(resource);
+		modernConnection.subscribe(player);
+		player.on(AudioPlayerStatus.Playing, () => {
+			console.log('YouTube audio is playing');
+		});
+		player.on(AudioPlayerStatus.Idle, () => {
+			console.log('YouTube audio finished');
+			queue.endDispatcher(player);
+		});
+		player.on('error', (error) => {
+			console.error('YouTube player error:', error);
+			queue.endDispatcher(player);
+		});
+		let counter = getAudioLength(song);
+		if (counter > 0) {
+			setTimeout(() => {
+				player.stop();
+				queue.endDispatcher(player);
+			}, counter * 1000);
+		}
+	} else {
+		console.log('No voice connection available for YouTube playback');
+		queue.endDispatcher(null);
+	}
+}
+
+// Helper: Get audio length in seconds
+function getAudioLength(song) {
+	let audioLength = song.length;
+	let counter = 0;
+	if (audioLength && audioLength !== '0s') {
+		if (isNaN(audioLength) && audioLength.indexOf('s') > -1) {
+			counter = parseInt(audioLength.split('s')[0]);
+		} else {
+			counter = parseInt(audioLength);
+		}
+	}
+	return counter;
+}
 'use strict';
 
 // Modern YouTube audio extraction
@@ -129,189 +228,25 @@ export default class PriorityQueue {
 			isPlaying = false;
 		}
 	}
-	// {'url': url, '', 'start': '0s', 'length': 30 }
-	async play() {
-		console.log('CURRENT QUEUE');
-		console.log(this);
-		let queue = this;
-		let song = this.getSongInfo();
-		let audioLink = song.url;
-		let audioStart = song.start;
-		let audioLength = song.length;
-		let connection = global.connection;
-		let counter;
-
-		isPlaying = true;
-
-		// Check if it's a local file (TTS responses, sound effects, etc.)
-		if (audioLink.indexOf('youtube') === -1 && audioLink.indexOf('http') === -1) {
-			console.log('PLAYING LOCAL AUDIO FILE');
-			console.log(audioLink);
-			
-			// Use modern Discord.js voice API for local files
-			try {
-				// Get the modern voice connection from the voice handler
-				// Try to get guild ID from multiple sources
-				let guildId = connection?.guild?.id || 
-				             connection?.joinConfig?.guildId || 
-				             Array.from(global.voiceHandler?.connections?.keys())?.[0];
-				
-				console.log('Looking for connection with guild ID:', guildId);
-				const modernConnection = global.voiceHandler?.getConnection(guildId);
-				
-				if (modernConnection) {
-					console.log('Found modern connection, creating player');
-					const player = createAudioPlayer();
-					const resource = createAudioResource(createReadStream(audioLink));
-					
-					player.play(resource);
-					modernConnection.subscribe(player);
-					
-					player.on(AudioPlayerStatus.Playing, () => {
-						console.log('Queue audio is playing');
-					});
-					
-					player.on(AudioPlayerStatus.Idle, () => {
-						console.log('Queue audio finished');
-						this.endDispatcher(player);
-					});
-					
-					player.on('error', (error) => {
-						console.error('Queue audio player error:', error);
-						this.endDispatcher(player);
-					});
-					
-					// Handle timed playback if specified
-					if (audioLength && audioLength !== '0s') {
-						if (isNaN(audioLength) && audioLength.indexOf('s') > -1) {
-							counter = parseInt(audioLength.split('s')[0]);
-						} else {
-							counter = parseInt(audioLength);
-						}
-						
-						if (counter > 0) {
-							setTimeout(() => {
-								player.stop();
-								this.endDispatcher(player);
-							}, counter * 1000);
-						}
-					}
-				} else {
-					console.log('No modern voice connection available, retrying in 2 seconds...');
-					console.log('Available connections:', Array.from(global.voiceHandler?.connections?.keys() || []));
-					// Retry after a short delay
-					setTimeout(() => {
-						// Try again with any available connection
-						const availableGuildIds = Array.from(global.voiceHandler?.connections?.keys() || []);
-						if (availableGuildIds.length > 0) {
-							const retryConnection = global.voiceHandler?.getConnection(availableGuildIds[0]);
-							if (retryConnection) {
-								console.log('Retry successful - playing audio with guild:', availableGuildIds[0]);
-								const player = createAudioPlayer();
-								const resource = createAudioResource(createReadStream(audioLink));
-								
-								player.play(resource);
-								retryConnection.subscribe(player);
-								
-								player.on(AudioPlayerStatus.Playing, () => {
-									console.log('Queue audio is playing (retry)');
-								});
-								
-								player.on(AudioPlayerStatus.Idle, () => {
-									console.log('Queue audio finished (retry)');
-									this.endDispatcher(player);
-								});
-								
-								player.on('error', (error) => {
-									console.error('Queue audio player error (retry):', error);
-									this.endDispatcher(player);
-								});
-							} else {
-								console.log('Retry failed - connection not usable');
-								this.endDispatcher(null);
-							}
-						} else {
-							console.log('Retry failed - no connections available');
-							this.endDispatcher(null);
-						}
-					}, 2000);
-				}
-			} catch (error) {
-				console.error('Error playing local audio:', error);
-				this.endDispatcher(null);
-			}
-		} else if (audioLink.indexOf('youtube') > -1) {
-			// Modern YouTube playback using play-dl
-			console.log('PLAYING YOUTUBE AUDIO');
-			console.log(`URL: ${audioLink}, Start: ${audioStart}, Length: ${audioLength}`);
-			
-			try {
-				// Get the modern voice connection
-				let guildId = connection?.guild?.id || 
-				             connection?.joinConfig?.guildId || 
-				             Array.from(global.voiceHandler?.connections?.keys())?.[0];
-				
-				const modernConnection = global.voiceHandler?.getConnection(guildId);
-				
-				if (modernConnection) {
-					console.log('Getting YouTube stream info...');
-					
-					// Get stream info and create audio resource
-					const streamInfo = await playDlStream(audioLink, { quality: 2 }); // Quality 2 = good audio quality
-					const resource = createAudioResource(streamInfo.stream, {
-						inputType: streamInfo.type
-					});
-					
-					const player = createAudioPlayer();
-					player.play(resource);
-					modernConnection.subscribe(player);
-					
-					player.on(AudioPlayerStatus.Playing, () => {
-						console.log('YouTube audio is playing');
-					});
-					
-					player.on(AudioPlayerStatus.Idle, () => {
-						console.log('YouTube audio finished');
-						this.endDispatcher(player);
-					});
-					
-					player.on('error', (error) => {
-						console.error('YouTube player error:', error);
-						this.endDispatcher(player);
-					});
-					
-					// Handle timed playback if specified
-					if (audioLength && audioLength !== '0s') {
-						let counter;
-						if (isNaN(audioLength) && audioLength.indexOf('s') > -1) {
-							counter = parseInt(audioLength.split('s')[0]);
-						} else {
-							counter = parseInt(audioLength);
-						}
-						
-						if (counter > 0) {
-							console.log(`YouTube audio will play for ${counter} seconds`);
-							setTimeout(() => {
-								player.stop();
-								this.endDispatcher(player);
-							}, counter * 1000);
-						}
-					}
-				} else {
-					console.log('No voice connection available for YouTube playback');
-					this.endDispatcher(null);
-				}
-			} catch (error) {
-				console.error('Error playing YouTube audio:', error);
-				console.error('This might be due to YouTube restrictions or invalid URL');
-				this.endDispatcher(null);
-			}
-		} else {
-			// Other URL types not supported yet
-			console.log('URL playback not yet supported:', audioLink);
-			setTimeout(() => {
-				this.endDispatcher(null);
-			}, 1000);
-		}
+// {'url': url, '', 'start': '0s', 'length': 30 }
+async play() {
+	console.log('CURRENT QUEUE');
+	console.log(this);
+	let queue = this;
+	let song = this.getSongInfo();
+	let audioLink = song.url;
+	isPlaying = true;
+	// Play local file (TTS, SFX, etc.)
+	if (audioLink.indexOf('youtube') === -1 && audioLink.indexOf('http') === -1) {
+		await playLocalFile(audioLink, queue, song);
+	} else if (audioLink.indexOf('youtube') > -1) {
+		await playYouTube(audioLink, queue, song);
+	} else {
+		// Other URL types not supported yet
+		console.log('URL playback not yet supported:', audioLink);
+		setTimeout(() => {
+			this.endDispatcher(null);
+		}, 1000);
 	}
+}
 };
