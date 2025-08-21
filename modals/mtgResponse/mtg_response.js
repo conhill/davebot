@@ -27,13 +27,14 @@ export async function mtgResponse(message) {
 			try {
 				const analysis = await global.aiHandler.analyzeMTGCard(card);
 				if (analysis) {
-					// Generate TTS response with the AI analysis
+					// Clean up awkward greetings from Gemini AI
+					let cleanAnalysis = analysis.replace(/^hey there[!,. ]*/i, '').replace(/^hey guys[!,. ]*/i, '');
+					// Generate TTS response with the cleaned AI analysis
 					if (global.ttsHandler) {
 						const audioPath = await global.ttsHandler.generatePersonalizedResponse(
-							analysis,
+							cleanAnalysis,
 							message.author.id
 						);
-						
 						if (audioPath && global.pQueue) {
 							global.pQueue.enqueue({
 								'url': audioPath,
@@ -41,9 +42,8 @@ export async function mtgResponse(message) {
 							}, 1);
 						}
 					}
-					
 					// Also send the analysis as text
-					// message.channel.send(`🎲 **Dave's Take:** ${analysis}`);
+					// message.channel.send(`🎲 **Dave's Take:** ${cleanAnalysis}`);
 				} else {
 					// Fallback to simple TTS without AI
 					const fallbackResponse = `Nice pull! ${card.name} is a ${card.type_line}. What do you think of this one?`;

@@ -121,13 +121,21 @@ export default class PriorityQueue {
 	}
 
 	checkAudioObj(audio) {
-		if (!audio.url)
-			{return false;}
-		if (!audio.start)
-			{audio.start = '0s';}
-		if (!audio.length && audio.url.indexOf('youtube') > -1)
-			{audio.length = 30;}
-
+		if (!audio.url) {
+			return false;
+		}
+		// Support url as string or object { path, cleanup }
+		let urlVal = audio.url;
+		if (typeof urlVal === 'object' && urlVal.path) {
+			audio.url = urlVal.path;
+			audio.audioObj = urlVal; // Pass cleanup function for later
+		}
+		if (!audio.start) {
+			audio.start = '0s';
+		}
+		if (!audio.length && typeof audio.url === 'string' && audio.url.indexOf('youtube') > -1) {
+			audio.length = 30;
+		}
 		return audio;
 	}
 

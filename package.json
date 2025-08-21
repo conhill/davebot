@@ -6,7 +6,9 @@
   "type": "module",
   "dependencies": {
     "@discordjs/voice": "^0.17.0",
+    "@elevenlabs/elevenlabs-js": "^2.10.0",
     "@google-cloud/text-to-speech": "^5.0.0",
+    "@google/genai": "^1.14.0",
     "@google/generative-ai": "^0.21.0",
     "discord.js": "^14.16.0",
     "dotenv": "^16.4.5",
