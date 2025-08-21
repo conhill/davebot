@@ -12,127 +12,146 @@ A modern Discord bot that brings together real-time voice command recognition, G
 - **Customizable Light Controls**: Integrates with Yeelight smart lights for fun effects.
 - **Modular ES Module Codebase**: Clean, maintainable, and easy to extend.
 
+## 🚀 Highlights
+
+- Real-time voice capture and transcription (Wit.ai)
+- Conversational responses and tag-prediction using Google Gemini / Vertex
+- Natural-sounding TTS via ElevenLabs (configurable voice)
+- Chat and command handlers for MTG card commentary, music playback, and more
+- Modular ES module codebase designed for easy extension
+<img width="701" height="496" alt="Untitled Diagram drawio" src="https://github.com/user-attachments/assets/a874128c-12e9-4482-9912-b4b0615061de" />
+
 ## 🛠️ Technology Stack
 
-- **Backend**: Node.js (Discord.js v14+, Express)
-- **Voice & Audio**: @discordjs/voice, fluent-ffmpeg, prism-media
-- **Speech Recognition**: Wit.ai API
-- **Text-to-Speech**: Google Cloud TTS
-- **Conversational AI**: Google Gemini AI
-- **Music Playback**: play-dl, YouTube API
-- **Smart Lights**: yeelight-awesome
+- Runtime: Node.js (v18+)
+- Discord API: discord.js (v14+)
+- Voice & Audio: @discordjs/voice, prism-media, fluent-ffmpeg, ffmpeg-static
+- Speech Recognition: Wit.ai (HTTP API)
+- Conversational AI / LLM: Google Gemini (Vertex) via the generative AI SDK
+- Text-to-Speech (TTS): ElevenLabs API (configured in `voice/ttsHandler.js`)
+- Music Playback: YouTube APIs / play-dl
+- Optional Smart Lights: Yeelight integrations
 
 ## 📋 Prerequisites
 
-- Node.js v18+ and npm/yarn
-- Discord bot token and server setup
-- Google Cloud project with TTS API enabled
-- Gemini API key from Google AI Studio
+- Node.js v18+ and npm or yarn
+- Discord bot token and a voice channel to join
 - Wit.ai API key
-- (Optional) Yeelight smart lights for light control
+- Google Gemini (Vertex) API key / Google application credentials
+- ElevenLabs API key and a voice ID
+- ffmpeg installed or use the included `ffmpeg-static` package
+
+
+Note: The project previously experimented with other TTS providers; the current default implementation uses ElevenLabs. Update `voice/ttsHandler.js` if you prefer a different provider.
 
 ## 🔧 Installation
 
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd davebot
-   ```
+1. Clone the repository
 
-2. **Install dependencies**
-   ```bash
-   npm install
-   # or
-   yarn install
-   ```
+```powershell
+git clone <repository-url>
+cd davebot
+```
 
-3. **Configure environment variables**
-   - Copy `.env.example` to `.env` and fill in your keys:
-     ```
-     ROOMKEY=your-discord-bot-token
-     VOICEROOM=your-voice-channel-id
-     GOOGLE_PROJECT_ID=your-google-project-id
-     GOOGLE_APPLICATION_CREDENTIALS=./dave-bot-creds.json
-     GEMINI_API_KEY=your-gemini-api-key
-     WITAIKEY=your-wit-ai-key
-     YOUTUBEKEY=your-youtube-api-key
-     ```
+2. Install dependencies
 
-4. **Set up Google Cloud credentials**
-   - Download your service account key and place it as specified in `.env`.
+```powershell
+npm install
+# or
+yarn install
+```
+
+3. Configure environment variables
+
+Copy `.env.example` to `.env` (or create `.env`) and set the required keys. Common variables used in this repo:
+
+- ROOMKEY: Discord bot token
+- VOICEROOM: Voice channel ID to auto-join
+- WITAIKEY: Wit.ai API key
+- GEMINI_API_KEY: Google Gemini / Vertex API key
+- GOOGLE_PROJECT_ID / GOOGLE_APPLICATION_CREDENTIALS: (if using Vertex with service account)
+- VERTEX_MODEL: Vertex model id (e.g., `gemini-2.5-flash-lite`)
+- ELEVENLABS_API_KEY: ElevenLabs API key
+- ELEVENLABS_VOICE_ID: Preferred ElevenLabs voice ID
+- YOUTUBEKEY: YouTube Data API key (for music commands)
+
+Example `.env` snippet:
+
+```properties
+ROOMKEY=your-discord-bot-token
+VOICEROOM=your-voice-channel-id
+WITAIKEY=your-witai-key
+GEMINI_API_KEY=your-gemini-key
+VERTEX_MODEL=gemini-2.5-flash-lite
+ELEVENLABS_API_KEY=your-elevenlabs-key
+ELEVENLABS_VOICE_ID=your-voice-id
+YOUTUBEKEY=your-youtube-key
+```
+
+4. Optional: place Google service account JSON where `GOOGLE_APPLICATION_CREDENTIALS` points if you use Vertex with service account auth.
 
 ## 🚀 Running the Bot
 
-1. **Start the bot**
-   ```bash
-   npm start
-   # or
-   yarn start
-   ```
+Start the bot:
 
-2. **Bot Output**
-   ```
-   Bot is online.
-   Running on port 3000.
-   Joined voice channel: <channel-name>
-   Modern voice connection established
-   ```
+```powershell
+npm start
+# or
+yarn start
+```
 
-## 📖 Command & Feature Overview
+Expected logs on success:
 
-### Voice Commands
+```
+Bot is online.
+Running on port 3000.
+Joined voice channel: <channel-name>
+```
 
-- Say “Dave” in a voice channel to trigger bot responses.
-- Simple commands: “dave play”, “dave help”, “dave drop that”, etc.
-- Conversational requests are routed to Gemini AI for natural replies.
+## 📖 Quick Usage
 
-### MTG Card Commentary
+- Say “Dave” or trigger voice commands in a voice channel to get a spoken response.
+- Chat commands like `!dave mtg` fetch MTG cards and produce AI analysis + TTS playback.
+- Music commands queue YouTube links via the bot's priority queue.
 
-- `!dave mtg` in chat: Fetches a random Magic: The Gathering card and provides AI-powered spoken analysis.
+## 🏗️ Architecture Overview
 
-### Music Queue
-
-- `!dave play <YouTube link>`: Queues a song for playback.
-- Priority queue ensures responses and music are played in order.
-
-### Light Controls
-
-- “dave seeing red” and other commands can trigger Yeelight smart light effects.
-
-## 🏗️ Architecture
-
-- **VoiceHandler**: Manages Discord voice connections, recording, and audio playback.
-- **GoogleTTSHandler**: Handles TTS requests, cost tracking, and audio file generation.
-- **GeminiAIHandler**: Integrates with Gemini AI for game analysis and conversational responses.
-- **PriorityQueue**: Manages audio playback order.
-- **Modals**: Modular response handlers for music, hype, MTG, help, and more.
+- `voice/VoiceHandler` — manages Discord voice connections, recording, and streaming audio to ASR.
+- `voice/ttsHandler.js` — ElevenLabs-based TTS implementation and usage tracking.
+- `ai/geminiAIHandler.js` — tag-prediction (Gemini) and Vertex-style final response generation.
+- `helpers/aiUtils.js` — response cleaning, tag helpers, and utility functions.
+- `modals/*` — modular response templates for MTG, generic replies, help, etc.
+- `PriorityQueue` — ensures conversational replies don't get interrupted by music playback.
 
 ## 🐛 Troubleshooting
 
-- **Bot not joining voice channel**: Check `VOICEROOM` and Discord permissions.
-- **TTS not working**: Verify Google Cloud credentials and API enablement.
-- **Gemini AI not responding**: Check API key and free tier limits.
-- **Audio playback issues**: Ensure ffmpeg is installed and accessible.
+- Bot not joining voice channel: verify `VOICEROOM` ID and bot permissions to connect/speak.
+- TTS failing: check `ELEVENLABS_API_KEY` and `ELEVENLABS_VOICE_ID` and inspect `voice/ttsHandler.js` logs.
+- Gemini/Vertex errors: verify `GEMINI_API_KEY`, `VERTEX_MODEL`, and Google service account setup if used.
+- ASR (Wit.ai) issues: confirm `WITAIKEY` and that audio is sent as WAV.
+- Audio playback issues: ensure ffmpeg is installed or use `ffmpeg-static`.
 
 ## 🤝 Contributing
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+1. Fork the repo
+2. Create a branch: `git checkout -b feature/your-feature`
+3. Commit and push
+4. Open a pull request describing your changes
+
+Please run lint/tests (if added) and keep changes modular.
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License — see the `LICENSE` file.
 
 ## 🙏 Acknowledgments
 
-- **Discord.js** - For the Discord API wrapper
-- **Google Cloud** - For TTS and Gemini AI
-- **Wit.ai** - For speech recognition
-- **Yeelight** - For smart light integration
+- discord.js — Discord API wrapper
+- Google Gemini / Vertex — LLM capabilities
+- Wit.ai — Speech-to-text
+- ElevenLabs — Text-to-speech
+- Many open-source libraries used for audio and media handling
 
 ---
 
-⭐ **Star this repository if you found it helpful!**
+If you want, I can also add a short troubleshooting section that captures developer-focused debug steps (enable DEBUG logs for AI responses, inspect `result` shapes, etc.).
